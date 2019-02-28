@@ -9,15 +9,9 @@ $width = 800;
 $height = 600;
 $font = './Gabriola.ttf';
 
-if (array_key_exists('zipcode', $_GET))
-   $zipcode = $_GET['zipcode'];
-else
-   ReturnError('Specify a zip code as a parameter in the URL that\'s in the weatherurl file on the Kindle (e.g. http://<your server>/ iweather.php?zipcode=10001& wundergroundapikey=<key>)');
-
-if (array_key_exists('wundergroundapikey', $_GET))
-   $apiKey = $_GET['wundergroundapikey'];
-else
-ReturnError('Get an API key from wunderground.com and specify it as a parameter in the URL that\'s in the weatherurl file on the Kindle  (e.g. http://<your server>/ iweather.php?zipcode=10001& wundergroundapikey=<key>)');
+$geoCode = "45.6811274,-94.5382767";
+$apiKey = "--API Key Here--";
+$endpoint = "https://api.darksky.net/forecast/$apiKey/$geoCode";
 
 try
 {
@@ -34,9 +28,9 @@ try
    $numberOfDays = 4;
    $numberOfHours = 6;
 
-   $weather = GetWeather($zipcode);
-   date_default_timezone_set($weather->current_observation->local_tz_long);
-   $moon = $weather->moon_phase->ageOfMoon;
+   $weather = GetForecast($geoCode, $apiKey, $endpoint);
+   date_default_timezone_set($weather->timezone);
+   $moon = round($weather->daily->data[0]->moonPhase * 100 / 3.56);
 
    $todaysConditionsWidth = (int) ($width * 0.722);
    $todaysHeight = (int) ($height * 0.7);
@@ -52,10 +46,11 @@ try
    $right = $width;
    $hourWidth = $right - $left;
    $hourHeight = $todaysHeight / $numberOfHours;
-   for ($h = 0; $h < min($numberOfHours, count($weather->hourly_forecast)); ++$h)
+   for ($h = 0; $h < min($numberOfHours, count($weather->hourly->data)); ++$h)
    {
+      $hourlyData = $weather->hourly->data[$h];
       $top = (int) ($todaysHeight / $numberOfHours * $h);
-      $hour = HourConditions($weather->hourly_forecast[$h], $hourWidth, $hourHeight, $biggestFontSize);
+      $hour = HourConditions($hourlyData, $hourWidth, $hourHeight, $biggestFontSize);
       imagecopy($im, $hour, $left, $top + 5, 0, 0, imagesx($hour), imagesy($hour));
       imagedestroy($hour);
 
@@ -78,7 +73,7 @@ try
    {
       $right = (int) ($width / $numberOfDays * $i);
       $dayWidth = $right - $left;
-      $future = FutureConditions($weather->forecast->simpleforecast->forecastday[$i], $dayWidth, $dayHeight, $statsFontSize, $iconSize, true);
+      $future = FutureConditions($weather->daily->data[$i], $dayWidth, $dayHeight, $statsFontSize, $iconSize, true);
       if ($statsFontSize < $finalStatsFontSize)
          $finalStatsFontSize = $statsFontSize;
       if ($iconSize < $finalIconSize)
@@ -91,7 +86,7 @@ try
    {
       $right = (int) ($width / $numberOfDays * $i);
       $dayWidth = $right - $left;
-      $future = FutureConditions($weather->forecast->simpleforecast->forecastday[$i], $dayWidth, $dayHeight, $finalStatsFontSize, $finalIconSize, false);
+      $future = FutureConditions($weather->daily->data[$i], $dayWidth, $dayHeight, $finalStatsFontSize, $finalIconSize, false);
       imagecopy($im, $future, $left, $top, 0, 0, $dayWidth, $dayHeight);
       imagedestroy($future);
 
@@ -118,9 +113,9 @@ try
    // no Kindle there either so it's OK
    else
    {
-	ReturnError('ImageMagick class does not exists');
-      //imagepng($im);
-      //imagedestroy($im);
+	//ReturnError('ImageMagick class does not exists');
+      imagepng($im);
+      imagedestroy($im);
    }
 }
 catch (Exception $e)
@@ -129,41 +124,33 @@ catch (Exception $e)
    ReturnError('Exception thrown: ' . $e->getMessage() . ' at line ' . $e->getLine() . ' in file ' . $file);
 }
 
-function GetWeather($zipcode)
+function GetForecast($geoCode, $apiKey, $endpoint)
 {
-   global $apiKey;
-   $ex = null;
+    $query = new HTTP_Request2($endpoint, HTTP_Request2::METHOD_GET,
+    array('connect_timeout' => 5, 'timeout' => 10));
+    $query->setHeader(array(
+        'Host' => 'api.darksky.net',
+        'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Encoding' => 'gzip, deflate',
+        'Accept-Language' => 'en-US,en;q=0.5',
+        'Connection' => 'keep-alive',
+    ));
+    $response = $query->send();
+    $status = $response->getStatus();
 
-   for ($retry = 0; $retry < 3; ++$retry)
-   {
-      try
-      {
-         // Get the weather data
-         $query = new HTTP_Request2("http://api.wunderground.com/api/$apiKey/forecast10day/alerts/astronomy/hourly/tide/yesterday/conditions/q/$zipcode.json", HTTP_Request2::METHOD_GET,
-            array('connect_timeout' => 5, 'timeout' => 10));
-         $query->setHeader(array(
-            'Host' => 'api.wunderground.com',
-            'User-Agent' => 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:28.0) Gecko/20100101 Firefox/28.0',
-            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Encoding' => 'gzip, deflate',
-            'Accept-Language' => 'en-US,en;q=0.5',
-            'Connection' => 'keep-alive',
-         ));
-         $response = $query->send();
-         $status = $response->getStatus();
+    if ($status != 200) throw new Exception("Attempt to load weather returned $status");
 
-         if ($status != 200) throw new Exception("Attempt to load weather returned $status");
+    $body = $response->getBody();
+    return json_decode($body);
+}
 
-         $body = $response->getBody();
-         $weather = json_decode($body);
-         return $weather;
-      }
-      catch (Exception $e)
-      {
-         $ex = $e;
-      }
-   }
-   throw $ex;
+function GetForecastFromFile()
+{
+    $fileContents = file_get_contents("./DarkSky_Forecast_Example.json", true); 
+    $forecast = json_decode($fileContents);
+
+    return $forecast;
 }
 
 function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
@@ -178,29 +165,9 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $black = imagecolorallocate($im, 0, 0, 0);
    imagefill($im, 0, 0, $white);
 
-   $icon = IconName($weather->current_observation->icon_url);
-   $currentTemp = round($weather->current_observation->temp_f);
-
-   // Summarize the conditions by removing anything about winds or temps
-   /*$conditions = explode('.', $weather->forecast->txt_forecast->forecastday[0]->fcttext);
-   $summary = '';
-   foreach ($conditions as $condition)
-   {
-   $condition = trim($condition);
-   if ($summary == '' ||
-   (substr($condition, 0, 5) != 'Winds' && substr($condition, 0, 3) != 'Low' &&
-   substr($condition, 0, 4) != 'High' && $condition != '' &&
-   strpos($condition, '%') === null))
-   {
-   $summary .= $condition . '. ';
-   }
-   }*/
-
-   // Write day and date
-   $headerFontSize = GetBestFontSize("Wednesday, December 28", $width - $sideMargins, 0);
-   $text = $weather->forecast->simpleforecast->forecastday[0]->date->weekday . ', ' .
-   $weather->forecast->simpleforecast->forecastday[0]->date->monthname . ' ' .
-   $weather->forecast->simpleforecast->forecastday[0]->date->day;
+   // Write date and weather summary
+   $text = date("D, M d", $weather->currently->time) . " - " . $weather->currently->summary . " ";
+   $headerFontSize = GetBestFontSize($text, $width- $sideMargins, 0);
    $box = imagettfbbox($headerFontSize, 0, $font, $text);
    $textHeight = BoxHeight($box);
    $bottom = $textHeight;
@@ -214,9 +181,10 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $box = imagettftext($im, $locationFontSize, 0, $sideMargins, $bottom, $black, $font, $text);
 
    // Draw the weather icon
+   $icon = IconName($weather->currently->icon);
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
-   $scaledIcon = ScaleImage($icon, (int) ($width * 0.2));
+   $scaledIcon = ScaleImage($icon, (int) ($width * 0.25));
    imagedestroy($icon);
    $iconWidth = imagesx($scaledIcon);
    $iconHeight = imagesy($scaledIcon);
@@ -229,21 +197,23 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $statsWidth = $width - $sideMargins * 2;
    // We'll use the same font for the high/low temperatures and the precipitation, so
    // try multiple font sizes
-   $highTempFontSize = GetBestTemperatureFontSize($weather->forecast->simpleforecast->forecastday[0]->high->fahrenheit, $statsWidth / 9, 0);
-   $lowTempFontSize = GetBestTemperatureFontSize($weather->forecast->simpleforecast->forecastday[0]->low->fahrenheit, $statsWidth / 9, 0);
-   $popFontSize = GetBestPrecipFontSize($weather->forecast->simpleforecast->forecastday[0]->pop, $statsWidth / 7, 0);
+   $highTemp = round($weather->daily->data[0]->temperatureHigh);
+   $lowTemp = round($weather->daily->data[0]->temperatureLow);
+   $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 9, 0);
+   $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 9, 0);
+   $popFontSize = GetBestPrecipFontSize($weather->currently->precipProbability, $statsWidth / 7, 0);
    $smallFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
+   
    // Draw the high/low temperatures.
-   $range = TemperatureRange($weather->forecast->simpleforecast->forecastday[0]->high->fahrenheit,
-      $weather->forecast->simpleforecast->forecastday[0]->low->fahrenheit,
-      $smallFontSize, $rangeWidth, $rangeHeight);
+   $range = TemperatureRange($highTemp, $lowTemp, $smallFontSize, $rangeWidth, $rangeHeight);
 
    // Draw the temperature
+   $currentTemp = round($weather->currently->temperature);
    $bigFontSize = GetBestTemperatureFontSize($currentTemp, $statsWidth / 2 * 0.2, 0);
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
    // Draw the precipitation
-   $precip = RenderPrecipitation($weather->forecast->simpleforecast->forecastday[0]->pop, $smallFontSize, $precipWidth, $precipHeight);
+   $precip = RenderPrecipitation($weather->currently->precipProbability, $smallFontSize, $precipWidth, $precipHeight);
 
    $stats = Merge($range, $temp, $precip, $statsWidth, 'middle', 'middle', 'mlr');
    imagecopy($im, $stats, (int) $sideMargins, $bottom, 0, 0, imagesx($stats), imagesy($stats));
@@ -252,8 +222,6 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    imagedestroy($stats);
    $bottom += $verticalMargins;
 
-   // Draw the conditions
-   //$conditions = RenderMultilineText($summary, $smallFontSize, $statsWidth, $textHeight);
    // Draw the astro information
    $astro = RenderAstro($weather, $moon, $statsWidth, $height - $bottom);
    $astroHeight = imagesy($astro);
@@ -268,14 +236,14 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    return $im;
 }
 
-function HourConditions($weather, $width, $height, $biggestFontSize)
+function HourConditions($hourlyData, $width, $height, $biggestFontSize)
 {
    global $font;
 
-   $time = $weather->FCTTIME->civil;
-   $temperature = $weather->temp->english;
-   $icon = IconName($weather->icon_url);
-   $precip = $weather->pop;
+   $time = date("g:i A", $hourlyData->time);
+   $temperature = round($hourlyData->temperature);
+   $icon = IconName($hourlyData->icon);
+   $precip = round($hourlyData->precipProbability);
 
    // Draw the time
    $fontSize = min(GetBestFontSize('12:00 AM', $width, $height / 3.5), $biggestFontSize);
@@ -301,10 +269,32 @@ function HourConditions($weather, $width, $height, $biggestFontSize)
    return Stack($time, $stats, ($height - imagesy($time) - imagesy($stats)) / 2);
 }
 
-function IconName($url)
+function IconName($icon)
 {
-   $name = basename(parse_url($url, PHP_URL_PATH));
-   return substr($name, 0, strpos($name, '.'));
+   switch ($icon) {
+      case "clear-day":
+         return "clear";
+      case "clear-night":
+         return "nt_clear";
+      case "cloudy":
+         return "cloudy";
+      case "fog":
+         return "fog";
+      case "partly-cloudy-day":
+         return "partlycloudy";
+      case "partly-cloudy-night":
+         return "nt_partlycloudy";
+      case "rain":
+         return "rain";
+      case "sleet":
+         return "sleet";
+      case "snow":
+         return "snow";
+      case "wind":
+         return "wind";
+      default:
+         return "";
+  }
 }
 
 function FormatTime($hour, $minute)
@@ -394,8 +384,8 @@ function RenderAstro($weather, $moon, $width, $height)
    $iconSize = (int) ($width / 2 / 4);
    $fontSize = GetBestFontSize(" Rise: 12:00 AM ", $width / 2 - $iconSize, 0);
 
-   $sunrise = FormatTime($weather->sun_phase->sunrise->hour, $weather->sun_phase->sunrise->minute);
-   $sunset = FormatTime($weather->sun_phase->sunset->hour, $weather->sun_phase->sunset->minute);
+   $sunrise = date("g:i A", $weather->daily->data[0]->sunriseTime);
+   $sunset = date("g:i A", $weather->daily->data[0]->sunsetTime);
    $moonAgeString = sprintf('%02d', $moon);
 
    date_default_timezone_set($weather->current_observation->local_tz_long);
@@ -458,13 +448,18 @@ function AstroTimes($icon, $str1, $time1, $str2, $time2, $width, $fontSize)
 
 function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$iconSize, $calculatetSizes)
 {
-   $dayFontSize = GetBestFontSize(" Wednesday ", $dayWidth, $dayHeight / 5);
+   $weekDay = " " . date("D", $dayInfo->time) . " ";
+   $highTemp = round($dayInfo->temperatureHigh);
+   $lowTemp = round($dayInfo->temperatureLow);
+   $precip = round($dayInfo->precipProbability);
+
+   $dayFontSize = GetBestFontSize($weekDay, $dayWidth, $dayHeight / 5);
 
    $im = imagecreatetruecolor($dayWidth, $dayHeight);
    $white = imagecolorallocate($im, 255, 255, 255);
    imagefill($im, 0, 0, $white);
-
-   $day = RenderText(' ' . $dayInfo->date->weekday . ' ', $dayFontSize, $textWidth, $textHeight);
+    
+   $day = RenderText($weekDay, $dayFontSize, $textWidth, $textHeight);
    $verticalMargin = 3;
    imagecopy($im, $day, (int)(($dayWidth - $textWidth) / 2), $verticalMargin, 0, 0, $textWidth, $textHeight);
    $top = imagesy($day) + $verticalMargin;
@@ -473,19 +468,18 @@ function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$ic
    $statsWidth = $dayWidth * 0.9;
    if ($calculatetSizes)
    {
-      $highTempFontSize = GetBestTemperatureFontSize($dayInfo->high->fahrenheit, $statsWidth / 2, 0);
-      $lowTempFontSize = GetBestTemperatureFontSize($dayInfo->low->fahrenheit, $statsWidth / 2, 0);
-      $popFontSize = GetBestPrecipFontSize($dayInfo->pop, $statsWidth / 2, 0);
+      $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 2, 0);
+      $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 2, 0);
+      $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 2, 0);
       $fontSize = $statsFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
    }
    else
       $fontSize = $statsFontSize;
    // Draw the high/low temperatures
-   $range = TemperatureRange($dayInfo->high->fahrenheit, $dayInfo->low->fahrenheit,
-      $fontSize / 2, $rangeWidth, $rangeHeight);
+   $range = TemperatureRange($highTemp, $lowTemp, $fontSize / 2, $rangeWidth, $rangeHeight);
 
    // Draw the precipitation
-   $precip = RenderPrecipitation($dayInfo->pop, $fontSize / 2, $precipWidth, $precipHeight);
+   $precip = RenderPrecipitation($precip, $fontSize / 2, $precipWidth, $precipHeight);
 
    $stats = Merge($range, null, $precip, $statsWidth);
    $statsHeight = imagesy($stats);
@@ -493,7 +487,7 @@ function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$ic
    imagecopy($im, $stats, (int) (($dayWidth - imagesx($stats)) / 2), $statsY, 0, 0, imagesx($stats), $statsHeight);
    imagedestroy($stats);
 
-   $icon = IconName($dayInfo->icon_url);
+   $icon = IconName($dayInfo->icon);
    // Draw the weather icon
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
