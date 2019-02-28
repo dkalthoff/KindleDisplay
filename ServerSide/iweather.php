@@ -10,7 +10,7 @@ $height = 600;
 $font = './Gabriola.ttf';
 
 $geoCode = "45.6811274,-94.5382767";
-$apiKey = "--API Key Here--";
+$apiKey = "-- Add api key here --";
 $endpoint = "https://api.darksky.net/forecast/$apiKey/$geoCode";
 
 try
@@ -29,6 +29,8 @@ try
    $numberOfHours = 6;
 
    $weather = GetForecast($geoCode, $apiKey, $endpoint);
+   //$weather = GetForecastFromFile();
+
    date_default_timezone_set($weather->timezone);
    $moon = round($weather->daily->data[0]->moonPhase * 100 / 3.56);
 
@@ -199,9 +201,11 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    // try multiple font sizes
    $highTemp = round($weather->daily->data[0]->temperatureHigh);
    $lowTemp = round($weather->daily->data[0]->temperatureLow);
+   $precip = $weather->currently->precipProbability * 100;
+
    $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 9, 0);
    $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 9, 0);
-   $popFontSize = GetBestPrecipFontSize($weather->currently->precipProbability, $statsWidth / 7, 0);
+   $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 7, 0);
    $smallFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
    
    // Draw the high/low temperatures.
@@ -213,7 +217,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
    // Draw the precipitation
-   $precip = RenderPrecipitation($weather->currently->precipProbability, $smallFontSize, $precipWidth, $precipHeight);
+   $precip = RenderPrecipitation($precip, $smallFontSize, $precipWidth, $precipHeight);
 
    $stats = Merge($range, $temp, $precip, $statsWidth, 'middle', 'middle', 'mlr');
    imagecopy($im, $stats, (int) $sideMargins, $bottom, 0, 0, imagesx($stats), imagesy($stats));
@@ -243,7 +247,7 @@ function HourConditions($hourlyData, $width, $height, $biggestFontSize)
    $time = date("g:i A", $hourlyData->time);
    $temperature = round($hourlyData->temperature);
    $icon = IconName($hourlyData->icon);
-   $precip = round($hourlyData->precipProbability);
+   $precip = $hourlyData->precipProbability * 100;
 
    // Draw the time
    $fontSize = min(GetBestFontSize('12:00 AM', $width, $height / 3.5), $biggestFontSize);
@@ -451,7 +455,7 @@ function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$ic
    $weekDay = " " . date("D", $dayInfo->time) . " ";
    $highTemp = round($dayInfo->temperatureHigh);
    $lowTemp = round($dayInfo->temperatureLow);
-   $precip = round($dayInfo->precipProbability);
+   $precip = $dayInfo->precipProbability * 100;
 
    $dayFontSize = GetBestFontSize($weekDay, $dayWidth, $dayHeight / 5);
 
@@ -468,13 +472,14 @@ function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$ic
    $statsWidth = $dayWidth * 0.9;
    if ($calculatetSizes)
    {
-      $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 2, 0);
-      $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 2, 0);
-      $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 2, 0);
+      $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 1.4, 0);
+      $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 1.4, 0);
+      $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 1.4, 0);
       $fontSize = $statsFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
    }
    else
       $fontSize = $statsFontSize;
+
    // Draw the high/low temperatures
    $range = TemperatureRange($highTemp, $lowTemp, $fontSize / 2, $rangeWidth, $rangeHeight);
 
