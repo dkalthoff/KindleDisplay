@@ -10,7 +10,7 @@ $height = 600;
 $font = './Gabriola.ttf';
 
 $geoCode = "45.6811274,-94.5382767";
-$apiKey = "-- Add api key here --";
+$apiKey = "-- api key here --";
 $endpoint = "https://api.darksky.net/forecast/$apiKey/$geoCode";
 
 try
@@ -168,7 +168,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    imagefill($im, 0, 0, $white);
 
    // Write date and weather summary
-   $text = date("D, M d", $weather->currently->time) . " - " . $weather->currently->summary . " ";
+   $text = date("D, M j", $weather->currently->time) . " - " . $weather->currently->summary . " ";
    $headerFontSize = GetBestFontSize($text, $width- $sideMargins, 0);
    $box = imagettfbbox($headerFontSize, 0, $font, $text);
    $textHeight = BoxHeight($box);
@@ -203,9 +203,9 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $lowTemp = round($weather->daily->data[0]->temperatureLow);
    $precip = $weather->currently->precipProbability * 100;
 
-   $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 9, 0);
-   $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 9, 0);
-   $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 7, 0);
+   $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 5, 0);
+   $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 5, 0);
+   $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 5, 0);
    $smallFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
    
    // Draw the high/low temperatures.
@@ -213,7 +213,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
 
    // Draw the temperature
    $currentTemp = round($weather->currently->temperature);
-   $bigFontSize = GetBestTemperatureFontSize($currentTemp, $statsWidth / 2 * 0.2, 0);
+   $bigFontSize = GetBestTemperatureFontSize($currentTemp, $statsWidth / 1.5 * 0.2, 0);
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
    // Draw the precipitation
