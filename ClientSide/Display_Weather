@@ -1,0 +1,19 @@
+#!/bin/sh
+
+rm -f /mnt/us/weather.png
+
+eips -c
+eips -c
+
+read url </mnt/us/weatherurl
+
+if wget $url -O /mnt/us/weather.png 2>/mnt/us/documents/recentweatherlog.txt; then
+
+   eips -g /mnt/us/weather.png
+
+else
+
+   cat /mnt/us/recentweatherlog.txt >>/mnt/us/documents/weatherlog.txt
+   eips -g /mnt/us/weather-image-error.png
+
+fi
