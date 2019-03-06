@@ -20,11 +20,6 @@ try
    $black = imagecolorallocate($im, 0, 0, 0);
    imagefill($im, 0, 0, $white);
 
-   if (strlen($apiKey) == 0)
-   {
-      ReturnError('Get an API key from api.wunderground.com and assign it to $apiKey in iweather.php');
-   }
-
    $numberOfDays = 4;
    $numberOfHours = 6;
 
@@ -169,7 +164,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
 
    // Write date and weather summary
    $text = date("D, M j", $weather->currently->time) . " - " . $weather->currently->summary . " ";
-   $headerFontSize = GetBestFontSize($text, $width- $sideMargins, 0);
+   $headerFontSize = min(40, GetBestFontSize($text, $width - $sideMargins, 0));
    $box = imagettfbbox($headerFontSize, 0, $font, $text);
    $textHeight = BoxHeight($box);
    $bottom = $textHeight;
@@ -213,7 +208,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
 
    // Draw the temperature
    $currentTemp = round($weather->currently->temperature);
-   $bigFontSize = GetBestTemperatureFontSize($currentTemp, $statsWidth / 1.5 * 0.2, 0);
+   $bigFontSize = GetBestTemperatureFontSize(100, $statsWidth * 0.3, 0);
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
    // Draw the precipitation
@@ -388,35 +383,21 @@ function RenderAstro($weather, $moon, $width, $height)
    $iconSize = (int) ($width / 2 / 4);
    $fontSize = GetBestFontSize(" Rise: 12:00 AM ", $width / 2 - $iconSize, 0);
 
+   // Sunrise & Sunset
    $sunrise = date("g:i A", $weather->daily->data[0]->sunriseTime);
    $sunset = date("g:i A", $weather->daily->data[0]->sunsetTime);
+   $sun = AstroTimes('icons/sun.png', ' Rise: ', $sunrise, ' Set: ', $sunset, $width / 2.6, $fontSize / 1.5);
+   
+   // Moon phase
    $moonAgeString = sprintf('%02d', $moon);
 
-   date_default_timezone_set($weather->current_observation->local_tz_long);
-   $month = $weather->forecast->simpleforecast->forecastday[0]->date->month;
-   $day = $weather->forecast->simpleforecast->forecastday[0]->date->day;
-   $year = $weather->forecast->simpleforecast->forecastday[0]->date->year;
-   $moonTimes = GetMoonTimes($year, $month, $day, $weather->current_observation->display_location->city, $weather->current_observation->display_location->state);
-   $moonrise = date('g:i A', $moonTimes['rise']);
-   $moonset = date('g:i A', $moonTimes['set']);
-   if ($moonTimes['rise'] < $moonTimes['set'])
-   {
-      $firstMoonEvent = ' Rise: ';
-      $secondMoonEvent = ' Set: ';
-      $firstMoonTime = $moonrise;
-      $secondMoonTime = $moonset;
-   }
-   else
-   {
-      $firstMoonEvent = ' Set: ';
-      $secondMoonEvent = ' Rise: ';
-      $firstMoonTime = $moonset;
-      $secondMoonTime = $moonrise;
-   }
-
-   $astroWidth = $width / 2;
-   $sun = AstroTimes('icons/sun.png', ' Rise: ', $sunrise, ' Set: ', $sunset, $astroWidth, $fontSize / 1.5);
-   $moon = AstroTimes("moons/NH-moon{$moonAgeString}.gif", $firstMoonEvent, $firstMoonTime, $secondMoonEvent, $secondMoonTime, $astroWidth, $fontSize / 1.5);
+   // Wind & Humidity
+   $wind = 'Wind: ' . round($weather->daily->data[0]->windSpeed) . ' mph';
+   $humidity = 'Humidity: ' . ($weather->daily->data[0]->humidity * 100) . '%';
+   $windGust = 'Gust: ' . round($weather->daily->data[0]->windGust) . ' mph';
+   $windGustTime = 'Time: ' . date('g:i A', $weather->daily->data[0]->windGustTime);
+   $moon = AstroTimes("moons/NH-moon{$moonAgeString}.gif", $wind, $humidity, $windGust, $windGustTime, $width / 1.7, $fontSize / 1.5);
+   
    $astro = Merge($sun, null, $moon, imagesx($sun) + imagesx($moon) + 10);
 
    return $astro;
@@ -611,7 +592,6 @@ function Stack($top, $bottom, $spacing = 0)
 
    return $im;
 }
-
 
 function RenderText($text, $fontSize, &$width, &$height)
 {
@@ -907,53 +887,6 @@ function ReturnError($message)
       imagedestroy($im);
    }
    exit(0);
-}
-
-function GetMoonTimes($year, $month, $date, $city, $state)
-{
-   for ($retry = 0; $retry < 3; ++$retry)
-   {
-      try
-      {
-         $query =  new HTTP_Request2("http://aa.usno.navy.mil/rstt/onedaytable?ID=AA&year=$year&month=$month&day=$date&state=$state&place=$city", HTTP_Request2::METHOD_GET,
-            array('connect_timeout' => 2, 'timeout' => 4));
-         $query->setHeader(array(
-            'Host' => 'aa.usno.navy.mil',
-            'User-Agent' => 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:28.0) Gecko/20100101 Firefox/28.0',
-            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language' => 'en-US,en;q=0.5',
-            'Accept-Encoding' => 'gzip, deflate',
-            'Connection' => 'keep-alive'
-         ));
-         $response = $query->send();
-         $status = $response->getStatus();
-         if ($status == 200)
-         {
-            $body = $response->getBody();
-
-            $rise = strtotime("$year-$month-$date " . ExtractTime($body, 'Moonrise'));
-            $set = strtotime("$year-$month-$date " . ExtractTime($body, 'Moonset'));
-
-            return array('rise' => $rise, 'set' => $set);
-         }
-      }
-      catch (Exception $e)
-      {
-      }
-   }
-   return null;
-}
-
-function ExtractTime($body, $label)
-{
-   $pos = strpos($body, 'on preceding day');
-   $pos = strpos($body, $label, $pos);
-   $pos = strpos($body, '<td>', $pos) + 4;
-   $end = strpos($body, '</td>', $pos);
-   $time = substr($body, $pos, $end - $pos);
-   $time = str_replace('a.m.', 'AM', $time);
-   $time = str_replace('p.m.', 'PM', $time);
-   return $time;
 }
 
 // Trims white space from the left and right sides of an image. Destroys the input
