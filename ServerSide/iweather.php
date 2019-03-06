@@ -20,6 +20,11 @@ try
    $black = imagecolorallocate($im, 0, 0, 0);
    imagefill($im, 0, 0, $white);
 
+   if (strlen($apiKey) == 0)
+   {
+      ReturnError('Get an API key from api.wunderground.com and assign it to $apiKey in iweather.php');
+   }
+
    $numberOfDays = 4;
    $numberOfHours = 6;
 
@@ -170,11 +175,18 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $bottom = $textHeight;
    $box = imagettftext($im, $headerFontSize, 0, $sideMargins, $bottom, $black, $font, $text);
 
+   // Write location
+   $text = $weather->current_observation->display_location->full;
+   $locationFontSize = min(GetBestFontSize($text, $width, 0), $headerFontSize * 0.66);
+   $box = imagettfbbox($locationFontSize, 0, $font, $text);
+   $bottom += $verticalMargins + BoxHeight($box);
+   $box = imagettftext($im, $locationFontSize, 0, $sideMargins, $bottom, $black, $font, $text);
+
    // Draw the weather icon
    $icon = IconName($weather->currently->icon);
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
-   $scaledIcon = ScaleImage($icon, (int) ($width * 0.15));
+   $scaledIcon = ScaleImage($icon, (int) ($width * 0.25));
    imagedestroy($icon);
    $iconWidth = imagesx($scaledIcon);
    $iconHeight = imagesy($scaledIcon);
@@ -182,7 +194,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    imagedestroy($scaledIcon);
    $bottom += $iconHeight;
 
-   $bottom += $verticalMargins * 6;
+   $bottom += $verticalMargins * 1;
 
    $statsWidth = $width - $sideMargins * 2;
    // We'll use the same font for the high/low temperatures and the precipitation, so
@@ -191,9 +203,9 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $lowTemp = round($weather->daily->data[0]->temperatureLow);
    $precip = $weather->currently->precipProbability * 100;
 
-   $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 6, 0);
-   $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 6, 0);
-   $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 6, 0);
+   $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 5, 0);
+   $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 5, 0);
+   $popFontSize = GetBestPrecipFontSize($precip, $statsWidth / 5, 0);
    $smallFontSize = min($highTempFontSize, $lowTempFontSize, $popFontSize);
    
    // Draw the high/low temperatures.
@@ -201,11 +213,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
 
    // Draw the temperature
    $currentTemp = round($weather->currently->temperature);
-<<<<<<< HEAD
    $bigFontSize = GetBestTemperatureFontSize(100, $statsWidth * 0.3, 0);
-=======
-   $bigFontSize = GetBestTemperatureFontSize($currentTemp, $statsWidth / 3.5, 0);
->>>>>>> f4348fc334be7906b5c6b8bbef3748aa2a67dfb0
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
    // Draw the precipitation
