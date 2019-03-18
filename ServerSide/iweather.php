@@ -10,7 +10,7 @@ $height = 600;
 $font = './Gabriola.ttf';
 
 $geoCode = "45.6811274,-94.5382767";
-$apiKey = "-- Api Key Here --";
+$apiKey = "-- Api Key Here  --";
 $endpoint = "https://api.darksky.net/forecast/$apiKey/$geoCode";
 
 try
@@ -186,7 +186,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $icon = IconName($weather->currently->icon);
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
-   $scaledIcon = ScaleImage($icon, (int) ($width * 0.25));
+   $scaledIcon = ScaleImage($icon, (int) ($width * 0.2));
    imagedestroy($icon);
    $iconWidth = imagesx($scaledIcon);
    $iconHeight = imagesy($scaledIcon);
