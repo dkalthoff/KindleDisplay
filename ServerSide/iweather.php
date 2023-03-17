@@ -5,13 +5,15 @@ require_once 'HTTP/Request2.php';
 header("Content-type: image/png");
 header("refresh: 1800");
 
+$useFileData = false;
 $width = 800;
 $height = 600;
 $font = './Gabriola.ttf';
 
-$geoCode = "45.6811274,-94.5382767";
+$latitude = "45.6811274";
+$longitude = "-94.5382767";
 $apiKey = "-- Api Key Here  --";
-$endpoint = "https://api.darksky.net/forecast/$apiKey/$geoCode";
+$endpoint = "https://api.openweathermap.org/data/3.0/onecall?appid=$apiKey&exclude=minutely,alerts&units=imperial&lat=$latitude&lon=$longitude";
 
 try
 {
@@ -28,11 +30,17 @@ try
    $numberOfDays = 4;
    $numberOfHours = 6;
 
-   $weather = GetForecast($geoCode, $apiKey, $endpoint);
-   //$weather = GetForecastFromFile();
-
+    if($useFileData)
+    {
+        $weather = GetForecastFromFile();
+    }
+    else
+    {
+        $weather = GetForecast($geoCode, $apiKey, $endpoint);
+    }
+   
    date_default_timezone_set($weather->timezone);
-   $moon = round($weather->daily->data[0]->moonPhase * 100 / 3.56);
+   $moon = round($weather->daily[0]->moon_phase * 100 / 3.56);
 
    $todaysConditionsWidth = (int) ($width * 0.722);
    $todaysHeight = (int) ($height * 0.7);
@@ -48,9 +56,9 @@ try
    $right = $width;
    $hourWidth = $right - $left;
    $hourHeight = $todaysHeight / $numberOfHours;
-   for ($h = 0; $h < min($numberOfHours, count($weather->hourly->data)); ++$h)
+   for ($h = 0; $h < min($numberOfHours, count($weather->hourly)); ++$h)
    {
-      $hourlyData = $weather->hourly->data[$h];
+      $hourlyData = $weather->hourly[$h];
       $top = (int) ($todaysHeight / $numberOfHours * $h);
       $hour = HourConditions($hourlyData, $hourWidth, $hourHeight, $biggestFontSize);
       imagecopy($im, $hour, $left, $top + 5, 0, 0, imagesx($hour), imagesy($hour));
@@ -75,7 +83,7 @@ try
    {
       $right = (int) ($width / $numberOfDays * $i);
       $dayWidth = $right - $left;
-      $future = FutureConditions($weather->daily->data[$i], $dayWidth, $dayHeight, $statsFontSize, $iconSize, true);
+      $future = FutureConditions($weather->daily[$i], $dayWidth, $dayHeight, $statsFontSize, $iconSize, true);
       if ($statsFontSize < $finalStatsFontSize)
          $finalStatsFontSize = $statsFontSize;
       if ($iconSize < $finalIconSize)
@@ -88,7 +96,7 @@ try
    {
       $right = (int) ($width / $numberOfDays * $i);
       $dayWidth = $right - $left;
-      $future = FutureConditions($weather->daily->data[$i], $dayWidth, $dayHeight, $finalStatsFontSize, $finalIconSize, false);
+      $future = FutureConditions($weather->daily[$i], $dayWidth, $dayHeight, $finalStatsFontSize, $finalIconSize, false);
       imagecopy($im, $future, $left, $top, 0, 0, $dayWidth, $dayHeight);
       imagedestroy($future);
 
@@ -149,7 +157,7 @@ function GetForecast($geoCode, $apiKey, $endpoint)
 
 function GetForecastFromFile()
 {
-    $fileContents = file_get_contents("./DarkSky_Forecast_Example.json", true); 
+    $fileContents = file_get_contents("./OpenWeatherMap_Forecast_Example.json", true); 
     $forecast = json_decode($fileContents);
 
     return $forecast;
@@ -168,7 +176,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    imagefill($im, 0, 0, $white);
 
    // Write date and weather summary
-   $text = date("D, M j", $weather->currently->time) . " - " . $weather->currently->summary . " ";
+   $text = date("D, M j", $weather->current->dt) . " - " . $weather->current->weather[0]->main . " ";
    $headerFontSize = min(40, GetBestFontSize($text, $width - $sideMargins, 0));
    $box = imagettfbbox($headerFontSize, 0, $font, $text);
    $textHeight = BoxHeight($box);
@@ -183,7 +191,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $box = imagettftext($im, $locationFontSize, 0, $sideMargins, $bottom, $black, $font, $text);
 
    // Draw the weather icon
-   $icon = IconName($weather->currently->icon);
+   $icon = $weather->current->weather[0]->icon;
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
    $scaledIcon = ScaleImage($icon, (int) ($width * 0.2));
@@ -199,9 +207,9 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $statsWidth = $width - $sideMargins * 2;
    // We'll use the same font for the high/low temperatures and the precipitation, so
    // try multiple font sizes
-   $highTemp = round($weather->daily->data[0]->temperatureHigh);
-   $lowTemp = round($weather->daily->data[0]->temperatureLow);
-   $precip = $weather->currently->precipProbability * 100;
+   $highTemp = round($weather->daily[0]->temp->max);
+   $lowTemp = round($weather->daily[0]->temp->min);
+   $precip = $weather->daily[0]->pop * 100;
 
    $highTempFontSize = GetBestTemperatureFontSize($highTemp, $statsWidth / 5, 0);
    $lowTempFontSize = GetBestTemperatureFontSize($lowTemp, $statsWidth / 5, 0);
@@ -212,7 +220,7 @@ function TodaysConditions($weather, $moon, $width, $height, &$headerFontSize)
    $range = TemperatureRange($highTemp, $lowTemp, $smallFontSize, $rangeWidth, $rangeHeight);
 
    // Draw the temperature
-   $currentTemp = round($weather->currently->temperature);
+   $currentTemp = round($weather->current->temp);
    $bigFontSize = GetBestTemperatureFontSize(100, $statsWidth * 0.3, 0);
    $temp = RenderTemperature($currentTemp, $bigFontSize, $tempWidth, $tempHeight);
 
@@ -244,10 +252,10 @@ function HourConditions($hourlyData, $width, $height, $biggestFontSize)
 {
    global $font;
 
-   $time = date("g:i A", $hourlyData->time);
-   $temperature = round($hourlyData->temperature);
-   $icon = IconName($hourlyData->icon);
-   $precip = $hourlyData->precipProbability * 100;
+   $time = date("g:i A", $hourlyData->dt);
+   $temperature = round($hourlyData->temp);
+   $icon = $hourlyData->weather[0]->icon;
+   $precip = $hourlyData->pop * 100;
 
    // Draw the time
    $fontSize = min(GetBestFontSize('12:00 AM', $width, $height / 3.5), $biggestFontSize);
@@ -271,34 +279,6 @@ function HourConditions($hourlyData, $width, $height, $biggestFontSize)
    $stats = Merge($temp, $scaledIcon, $precip, $width, 'middle', 'middle');
 
    return Stack($time, $stats, ($height - imagesy($time) - imagesy($stats)) / 2);
-}
-
-function IconName($icon)
-{
-   switch ($icon) {
-      case "clear-day":
-         return "clear";
-      case "clear-night":
-         return "nt_clear";
-      case "cloudy":
-         return "cloudy";
-      case "fog":
-         return "fog";
-      case "partly-cloudy-day":
-         return "partlycloudy";
-      case "partly-cloudy-night":
-         return "nt_partlycloudy";
-      case "rain":
-         return "rain";
-      case "sleet":
-         return "sleet";
-      case "snow":
-         return "snow";
-      case "wind":
-         return "wind";
-      default:
-         return "";
-  }
 }
 
 function FormatTime($hour, $minute)
@@ -389,23 +369,51 @@ function RenderAstro($weather, $moon, $width, $height)
    $fontSize = GetBestFontSize(" Rise: 12:00 AM ", $width / 2 - $iconSize, 0);
 
    // Sunrise & Sunset
-   $sunrise = date("g:i A", $weather->daily->data[0]->sunriseTime);
-   $sunset = date("g:i A", $weather->daily->data[0]->sunsetTime);
+   $sunrise = date("g:i A", $weather->daily[0]->sunrise);
+   $sunset = date("g:i A", $weather->daily[0]->sunset);
    $sun = AstroTimes('icons/sun.png', ' Rise: ', $sunrise, ' Set: ', $sunset, $width / 2.6, $fontSize / 1.5);
    
    // Moon phase
    $moonAgeString = sprintf('%02d', $moon);
 
    // Wind & Humidity
-   $wind = 'Wind: ' . round($weather->daily->data[0]->windSpeed) . ' mph';
-   $humidity = 'Humidity: ' . ($weather->daily->data[0]->humidity * 100) . '%';
-   $windGust = 'Gust: ' . round($weather->daily->data[0]->windGust) . ' mph';
-   $windGustTime = 'Time: ' . date('g:i A', $weather->daily->data[0]->windGustTime);
+   $wind = 'Wind: ' . round($weather->current->wind_speed) . ' mph';
+   $humidity = 'Humidity: ' . ($weather->current->humidity) . '%';
+   $windGust = 'Gust: ' . round($weather->current->wind_gust) . ' mph';
+   $windGustTime = 'From: ' . windDirection($weather->current->wind_deg);
    $moon = AstroTimes("moons/NH-moon{$moonAgeString}.gif", $wind, $humidity, $windGust, $windGustTime, $width / 1.7, $fontSize / 1.5);
    
    $astro = Merge($sun, null, $moon, imagesx($sun) + imagesx($moon) + 10);
 
    return $astro;
+}
+
+function windDirection($deg) {
+	$cardinalDirections = array(
+		'N' => array(348.75, 360),
+		'N' => array(0, 11.25),
+		'NNE' => array(11.25, 33.75),
+		'NE' => array(33.75, 56.25),
+		'ENE' => array(56.25, 78.75),
+		'E' => array(78.75, 101.25),
+		'ESE' => array(101.25, 123.75),
+		'SE' => array(123.75, 146.25),
+		'SSE' => array(146.25, 168.75),
+		'S' => array(168.75, 191.25),
+		'SSW' => array(191.25, 213.75),
+		'SW' => array(213.75, 236.25),
+		'WSW' => array(236.25, 258.75),
+		'W' => array(258.75, 281.25),
+		'WNW' => array(281.25, 303.75),
+		'NW' => array(303.75, 326.25),
+		'NNW' => array(326.25, 348.75)
+	);
+	foreach ($cardinalDirections as $dir => $angles) {
+			if ($deg >= $angles[0] && $deg < $angles[1]) {
+				$cardinal = $dir;
+			}
+		}
+		return $cardinal;
 }
 
 function AstroTimes($icon, $str1, $time1, $str2, $time2, $width, $fontSize)
@@ -438,10 +446,10 @@ function AstroTimes($icon, $str1, $time1, $str2, $time2, $width, $fontSize)
 
 function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$iconSize, $calculatetSizes)
 {
-   $weekDay = " " . date("D", $dayInfo->time) . " ";
-   $highTemp = round($dayInfo->temperatureHigh);
-   $lowTemp = round($dayInfo->temperatureLow);
-   $precip = $dayInfo->precipProbability * 100;
+   $weekDay = " " . date("D", $dayInfo->dt) . " ";
+   $highTemp = round($dayInfo->temp->max);
+   $lowTemp = round($dayInfo->temp->min);
+   $precip = $dayInfo->pop * 100;
 
    $dayFontSize = GetBestFontSize($weekDay, $dayWidth, $dayHeight / 5);
 
@@ -478,7 +486,7 @@ function FutureConditions($dayInfo, $dayWidth, $dayHeight, &$statsFontSize, &$ic
    imagecopy($im, $stats, (int) (($dayWidth - imagesx($stats)) / 2), $statsY, 0, 0, imagesx($stats), $statsHeight);
    imagedestroy($stats);
 
-   $icon = IconName($dayInfo->icon);
+   $icon = $dayInfo->weather[0]->icon;
    // Draw the weather icon
    $path = "icons/$icon.png";
    $icon = imagecreatefrompng($path);
